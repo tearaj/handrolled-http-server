@@ -1,10 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"os"
-	"strings"
 )
 
 const BYTES_TO_READ = 8
@@ -14,30 +15,34 @@ func main() {
 	if err != nil {
 		log.Fatal("File does not exist")
 	}
-	eightByteBuffer := make([]byte, 8)
-	currentLine := ""
-	for {
-		n, err := fp.Read(eightByteBuffer)
-		if err != nil {
-			break
-		}
-		readString := string(eightByteBuffer[:n])
-		splitStrings := strings.Split(readString, "\n")
-		numParts := len(splitStrings)
-		if numParts == 1 {
-			currentLine += string(splitStrings[0])
-			continue
-		}
-		for i, val := range(splitStrings) {
-			if (i == 1) {
-				fmt.Printf("read: %s\n", currentLine)
-				currentLine = ""
-			}
-			currentLine += string(val)
-		}
+	ch := getLinesChannel(fp)
+	for val := range ch {
+		fmt.Printf("read: %v\n", val)
 	}
+}
 
-	if(currentLine != "") {
-		fmt.Printf("read: %s", currentLine)
-	}
+func getLinesChannel(f io.ReadCloser) <-chan string {
+	dataCh := make(chan string)
+	currLine := ""
+	go func() {
+		defer f.Close()
+		defer close(dataCh)
+		for {
+			data := make([]byte, BYTES_TO_READ)
+			_, err := f.Read(data)
+			if err == io.EOF {
+				dataCh <- currLine
+				log.Println("Data read completed. Closing file.")
+				break
+			}
+			if i := bytes.IndexByte(data, '\n'); i != -1 {
+				currLine += string(data[:i])
+				dataCh <- currLine
+				currLine = ""
+				data = data[i+1:]
+			}
+			currLine += string(data[:])
+		}
+	}()
+	return dataCh
 }
