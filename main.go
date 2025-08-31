@@ -15,31 +15,29 @@ func main() {
 		log.Fatal("File does not exist")
 	}
 	eightByteBuffer := make([]byte, 8)
-	allLines := make([][]byte, 7)
-	currLineIndex := 0
+	currentLine := ""
 	for {
 		n, err := fp.Read(eightByteBuffer)
-
 		if err != nil {
-			log.Println("Error: ", err)
 			break
 		}
 		readString := string(eightByteBuffer[:n])
 		splitStrings := strings.Split(readString, "\n")
-		if len(splitStrings) == 1 {
-			allLines[currLineIndex] = append(allLines[currLineIndex], []byte(splitStrings[0])...)
-		} else {
-			// Newlines found, handle each part
-			for i, val := range splitStrings {
-				allLines[currLineIndex] = append(allLines[currLineIndex], []byte(val)...)
-				if i < len(splitStrings)-1 {
-					currLineIndex++
-				}
+		numParts := len(splitStrings)
+		if numParts == 1 {
+			currentLine += string(splitStrings[0])
+			continue
+		}
+		for i, val := range(splitStrings) {
+			if (i == 1) {
+				fmt.Printf("read: %s\n", currentLine)
+				currentLine = ""
 			}
+			currentLine += string(val)
 		}
 	}
 
-	for _, val := range allLines {
-		fmt.Println(string(val))
+	if(currentLine != "") {
+		fmt.Printf("read: %s", currentLine)
 	}
 }
