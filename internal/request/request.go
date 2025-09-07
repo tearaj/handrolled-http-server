@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"regexp"
 	"strings"
 )
@@ -12,12 +11,14 @@ import (
 type RequestState int
 
 const SEPARATOR = "\r\n" // CRLF is the separator
-var BUFFER_SIZE = 1024
-
+const INITIAL_BUFFER_SIZE = 1
+const MAX_BUFFER_SIZE = 1024
 const (
 	Initialized RequestState = iota
 	Done
 )
+
+var httpVersionRegexMatch = regexp.MustCompile(`^HTTP/\d+(?:\.\d+)?$`)
 
 type Request struct {
 	RequestLine RequestLine
@@ -30,15 +31,32 @@ type RequestLine struct {
 	HttpVersion   string
 }
 
-var httpVersionRegexMatch = regexp.MustCompile(`^HTTP/\d+(?:\.\d+)?$`)
+func (r *Request) isDone() bool {
+	return r.status == Done
+}
+func (r *Request) isValidStatus() bool {
+	return r.status >= Initialized && r.status <= Done
+}
+func newInitializedRequest() *Request {
+	return &Request{status: Initialized}
+}
 
 func RequestFromReader(r io.Reader) (Request, error) {
-	buffer := make([]byte, BUFFER_SIZE)
+	bufferSize := INITIAL_BUFFER_SIZE
+
+	buffer := make([]byte, bufferSize)
 	request := newInitializedRequest()
 	readIndex := 0
 	for !request.isDone() {
+		if readIndex == bufferSize {
+			increasedBuffer, increasedBufferSize, err := increaseBufferSize(buffer, MAX_BUFFER_SIZE)
+			buffer = increasedBuffer
+			bufferSize = increasedBufferSize
+			if err != nil {
+				return Request{}, err
+			}
+		}
 		readByteCount, err := r.Read(buffer[readIndex:])
-		log.Print(readByteCount)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -73,7 +91,6 @@ func parseRequestLine(requestStr string) (int, *RequestLine, error) {
 	resource := parts[1]
 	version, err := extractVersion(parts[2])
 	totalReadBytes := len(requestLineStr) + len(SEPARATOR)
-	log.Print("total read bytes: ", totalReadBytes)
 	return totalReadBytes, &RequestLine{method, resource, version}, err
 }
 
@@ -108,12 +125,13 @@ func (r *Request) parse(data []byte) (int, error) {
 
 	return bytesParsed, nil
 }
-func (r *Request) isDone() bool {
-	return r.status == Done
-}
-func (r *Request) isValidStatus() bool {
-	return r.status >= Initialized && r.status <= Done
-}
-func newInitializedRequest() *Request {
-	return &Request{status: Initialized}
+
+func increaseBufferSize(currentBuffer []byte, maxBufferSize int) ([]byte, int, error) {
+	if len(currentBuffer) == maxBufferSize {
+		return currentBuffer, maxBufferSize, fmt.Errorf("maximum buffer size of %v reached", maxBufferSize)
+	}
+	tmpBuffer := make([]byte, 2*len(currentBuffer))
+	copy(tmpBuffer, currentBuffer)
+
+	return tmpBuffer, 2 * len(currentBuffer), nil
 }
