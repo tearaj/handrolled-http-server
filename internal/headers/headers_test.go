@@ -66,6 +66,17 @@ func TestValidDone(t *testing.T) {
 	assert.True(t, done, true)
 }
 
+func TestValidHeadersMerged(t *testing.T) {
+	headers := NewHeaders()
+	data := []byte("         liked-by: jack\r\n liked-by: rock\r\n")
+	n, done, err := headers.Parse(data)
+	n, done, err = headers.Parse(data[n:])
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	assert.Equal(t, "jack, rock", headers["liked-by"])
+	assert.False(t, done)
+}
+
 func TestInvalidHeaderNameWithSpace(t *testing.T) {
 	headers := NewHeaders()
 	data := []byte("       Host : localhost:42069       \r\n\r\n")

@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"httpFromTCP/internal/constants"
+	"httpFromTCP/internal/utils"
 	"maps"
+
+	// "maps"
 	"regexp"
 	"strings"
 )
@@ -13,8 +16,11 @@ type Headers map[string]string
 
 var validHeaderNamesRegex = regexp.MustCompile("^[A-Za-z0-9!#$%&'*+\\-.^_`|~]+$")
 
+func NewHeaders() Headers {
+	return make(map[string]string)
+}
+
 func (h Headers) Parse(data []byte) (int, bool, error) {
-	// n := 0
 	separatorIndex := bytes.Index(data, []byte(constants.SEPARATOR))
 	if separatorIndex == 0 {
 		return len(constants.SEPARATOR), true, nil
@@ -29,7 +35,7 @@ func (h Headers) Parse(data []byte) (int, bool, error) {
 	if err != nil {
 		return 0, false, err
 	}
-	maps.Copy(h, headers.normalizeHeaderKeys())
+	h.mergeHeaders(headers.normalizeHeaderKeys())
 	return separatorIndex + len(constants.SEPARATOR), false, nil
 }
 
@@ -58,12 +64,17 @@ func validateHeader(header string) (Headers, error) {
 
 func (h Headers) normalizeHeaderKeys() Headers {
 	normalizedHeaders := make(Headers, len(h))
-	for k := range maps.Keys(h) {
+	for k := range h {
 		normalizedHeaders[strings.ToLower(k)] = h[k]
 	}
 	return normalizedHeaders
 }
 
-func NewHeaders() Headers {
-	return make(map[string]string)
+func (h1 Headers) mergeHeaders(h2 Headers) {
+	h3 := utils.MergeMaps(h1, h2, resolver)
+	maps.Copy(h1, h3)
+}
+
+func resolver(a, b string) string {
+	return fmt.Sprintf("%s, %s", a, b)
 }
