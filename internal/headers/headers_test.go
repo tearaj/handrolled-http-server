@@ -18,6 +18,54 @@ func TestValidHeaders(t *testing.T) {
 	assert.False(t, done)
 }
 
+func TestValidSingleHeaderWithSpace(t *testing.T) {
+	headers := NewHeaders()
+	data := []byte("         Host: localhost:42069\r\n\r\n")
+	n, done, err := headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	assert.Equal(t, "localhost:42069", headers["Host"])
+	assert.Equal(t, 32, n)
+	assert.False(t, done)
+}
+
+func TestValidMultipleHeader(t *testing.T) {
+	headers := NewHeaders()
+	data := []byte("Host: localhost:42069\r\n Content-length: 1234\r\n\r\n")
+	n, done, err := headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	assert.Equal(t, "localhost:42069", headers["Host"])
+	assert.Equal(t, 23, n)
+	assert.False(t, done)
+
+	n2, done, err := headers.Parse(data[23:])
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	assert.Equal(t, "1234", headers["Content-length"])
+	assert.Equal(t, 23, n2)
+	assert.False(t, done)
+
+	n3, done, err := headers.Parse(data[46:])
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	assert.Equal(t, 2, n3)
+	assert.True(t, done)
+}
+
+func TestValidDone(t *testing.T) {
+	headers := NewHeaders()
+	data := []byte("         Host: localhost:42069\r\n\r\n")
+	n, done, err := headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	assert.Equal(t, "localhost:42069", headers["Host"])
+	assert.Equal(t, 32, n)
+	assert.False(t, done)
+	n, done, err = headers.Parse(data[32:])
+	assert.True(t, done, true)
+}
+
 func TestInvalidHeaders(t *testing.T) {
 	headers := NewHeaders()
 	data := []byte("       Host : localhost:42069       \r\n\r\n")
@@ -25,5 +73,4 @@ func TestInvalidHeaders(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, 0, n)
 	assert.False(t, done)
-
 }
