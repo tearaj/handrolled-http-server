@@ -128,3 +128,66 @@ func TestBodyParsing(t *testing.T) {
 	r, err = RequestFromReader(reader)
 	require.Error(t, err)
 }
+
+func TestBodyParsingWithEmptyBodyAndNoContentLength(t *testing.T) {
+	// Test: "Empty Body, 0 reported content length" (valid)
+	reader := &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 0\r\n" +
+			"\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Empty(t, r.Body)
+	assert.Equal(t, "0", r.Headers["content-length"])
+
+}
+
+func TestBodyParsingWithEmptyBodyAndNoReportedContentLength(t *testing.T) {
+	reader := &chunkReader{
+		data: "GET /resource HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"User-Agent: curl/7.81.0\r\n" +
+			"\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Empty(t, r.Body)
+	_, hasContentLength := r.Headers.Get("content-length")
+	assert.False(t, hasContentLength)
+}
+
+func TestBodyParsingWithBodyShorterThanContentLength(t *testing.T) {
+	reader := &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 20\r\n" +
+			"\r\n" +
+			"only 15 bytes here",
+		numBytesPerRead: 3,
+	}
+	_, err := RequestFromReader(reader)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "content-length reported not matching actual")
+}
+
+func TestBodyWithNoContentLengthButBodyExist(t *testing.T) {
+	reader := &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"\r\n" +
+			"this body will be ignored",
+		numBytesPerRead: 3,
+	}
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Empty(t, r.Body)
+	_, hasContentLength := r.Headers.Get("content-length")
+	assert.False(t, hasContentLength)
+}
