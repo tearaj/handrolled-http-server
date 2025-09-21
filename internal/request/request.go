@@ -6,20 +6,23 @@ import (
 	"httpFromTCP/internal/headers"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
-type RequestState int
+type RequestState string
 
 const SEPARATOR = "\r\n" // CRLF is the separator
 const INITIAL_BUFFER_SIZE = 1
 const MAX_BUFFER_SIZE = 1024
 const (
-	Initialized RequestState = iota
-	StateRequestLine
-	StateHeaders
-	StateHeadersDone
-	Done
+	Initialized      RequestState = "INITIALIZED"
+	StateRequestLine RequestState = "STATE_REQUEST_LINE"
+	StateHeaders     RequestState = "STATE_HEADERS"
+	StateHeadersDone RequestState = " STATE_HEADERS_DONE"
+	StateBody        RequestState = "STATE_BODY"
+	StateBodyDone    RequestState = "STATE_BODY_DONE"
+	Done             RequestState = "DONE"
 )
 
 var httpVersionRegexMatch = regexp.MustCompile(`^HTTP/\d+(?:\.\d+)?$`)
@@ -27,6 +30,7 @@ var httpVersionRegexMatch = regexp.MustCompile(`^HTTP/\d+(?:\.\d+)?$`)
 type Request struct {
 	RequestLine RequestLine
 	Headers     headers.Headers
+	Body        []byte
 	status      RequestState
 }
 
@@ -38,6 +42,24 @@ type RequestLine struct {
 
 func (r *Request) isDone() bool {
 	return r.status == Done
+}
+
+func (r *Request) isValidContentLength() error {
+	if !r.isDone() {
+		return fmt.Errorf("body: content length check done before body parsing completion")
+	}
+	contentLengthStr, ok := r.Headers.Get(headers.CONTENT_LENGTH)
+	if !ok {
+		return nil
+	}
+	contentLength, err := strconv.Atoi(contentLengthStr)
+	if err != nil {
+		return fmt.Errorf("body: %w", err)
+	}
+	if contentLength != len(r.Body) {
+		return fmt.Errorf("body: content-length reported not matching actual")
+	}
+	return nil
 }
 
 func newInitializedRequest() *Request {
@@ -62,6 +84,7 @@ func RequestFromReader(r io.Reader) (Request, error) {
 		readByteCount, err := r.Read(buffer[readIndex:])
 		if err != nil {
 			if err == io.EOF {
+				request.status = Done
 				break
 			}
 			return Request{}, err
@@ -78,7 +101,9 @@ func RequestFromReader(r io.Reader) (Request, error) {
 		}
 	}
 
-	return *request, nil
+	err := request.isValidContentLength()
+
+	return *request, err
 }
 
 func extractVersion(versionStr string) (string, error) {
@@ -99,6 +124,8 @@ func (r *Request) parse(data []byte) (int, error) {
 		return initializedStateMethod(r, data)
 	case StateHeaders:
 		return stateHeadersMethod(r, data)
+	case StateBody:
+		return stateBodyMethod(r, data)
 	}
 	return 0, fmt.Errorf("Unknown state")
 }
@@ -128,9 +155,19 @@ func stateHeadersMethod(r *Request, data []byte) (int, error) {
 		return 0, nil
 	}
 	if done {
-		r.status = Done
+		_, ok := r.Headers.Get(headers.CONTENT_LENGTH)
+		if ok {
+			r.status = StateBody
+		} else {
+			r.status = Done
+		}
 	}
 	return n, nil
+}
+
+func stateBodyMethod(r *Request, data []byte) (int, error) {
+	r.Body = append(r.Body, data...)
+	return len(data), nil
 }
 
 func increaseBufferSize(currentBuffer []byte, maxBufferSize int) ([]byte, int, error) {

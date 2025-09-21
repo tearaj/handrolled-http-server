@@ -14,6 +14,8 @@ import (
 
 type Headers map[string]string
 
+const CONTENT_LENGTH = "content-length"
+
 var validHeaderNamesRegex = regexp.MustCompile("^[A-Za-z0-9!#$%&'*+\\-.^_`|~]+$")
 
 func NewHeaders() Headers {
@@ -37,6 +39,11 @@ func (h Headers) Parse(data []byte) (int, bool, error) {
 	}
 	h.mergeHeaders(headers.normalizeHeaderKeys())
 	return separatorIndex + len(constants.SEPARATOR), false, nil
+}
+
+func (h Headers) Get(key string) (string, bool) {
+	val, ok := h[strings.ToLower(key)]
+	return val, ok
 }
 
 func validateHeader(header string) (Headers, error) {
