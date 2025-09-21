@@ -66,11 +66,21 @@ func TestValidDone(t *testing.T) {
 	assert.True(t, done, true)
 }
 
-func TestInvalidHeaders(t *testing.T) {
+func TestInvalidHeaderNameWithSpace(t *testing.T) {
 	headers := NewHeaders()
 	data := []byte("       Host : localhost:42069       \r\n\r\n")
 	n, done, err := headers.Parse(data)
 	require.Error(t, err)
+	assert.Equal(t, 0, n)
+	assert.False(t, done)
+}
+
+func TestInvalidHeaderNameWithUnsupportedCharacters(t *testing.T) {
+	headers := NewHeaders()
+	data := []byte("       Hos@t: localhost:42069       \r\n\r\n")
+	n, done, err := headers.Parse(data)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "header name contains unsupported characters")
 	assert.Equal(t, 0, n)
 	assert.False(t, done)
 }

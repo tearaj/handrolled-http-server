@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"httpFromTCP/internal/constants"
 	"maps"
+	"regexp"
 	"strings"
 )
 
 type Headers map[string]string
+
+var validHeaderNamesRegex = regexp.MustCompile("^[A-Za-z0-9!#$%&'*+\\-.^_`|~]+$")
 
 func (h Headers) Parse(data []byte) (int, bool, error) {
 	// n := 0
@@ -43,6 +46,9 @@ func validateHeader(header string) (Headers, error) {
 		return Headers{}, fmt.Errorf("header: header name or valud has spaces in invalid locations")
 	}
 	trimmedHeaderName := strings.TrimSpace(headerName)
+	if !validHeaderNamesRegex.Match([]byte(trimmedHeaderName)) {
+		return Headers{}, fmt.Errorf("header: header name contains unsupported characters")
+	}
 	if strings.Contains(trimmedHeaderName, " ") {
 		return Headers{}, fmt.Errorf("header: header name contains spaces")
 	}
