@@ -3,6 +3,7 @@ package request
 import (
 	"errors"
 	"fmt"
+	"httpFromTCP/internal/headers"
 	"io"
 	"regexp"
 	"strings"
@@ -15,6 +16,9 @@ const INITIAL_BUFFER_SIZE = 1
 const MAX_BUFFER_SIZE = 1024
 const (
 	Initialized RequestState = iota
+	StateRequestLine
+	StateHeaders
+	StateHeadersDone
 	Done
 )
 
@@ -22,6 +26,7 @@ var httpVersionRegexMatch = regexp.MustCompile(`^HTTP/\d+(?:\.\d+)?$`)
 
 type Request struct {
 	RequestLine RequestLine
+	Headers     headers.Headers
 	status      RequestState
 }
 
@@ -69,12 +74,66 @@ func RequestFromReader(r io.Reader) (Request, error) {
 			return Request{}, err
 		}
 		if parsedCount != 0 {
-			copy(buffer, buffer[parsedCount:])
-			readIndex = parsedCount
+			remainingUnparsedBytes := readIndex - parsedCount
+			copy(buffer, buffer[parsedCount:readIndex])
+			readIndex = remainingUnparsedBytes
 		}
 	}
 
 	return *request, nil
+}
+
+func extractVersion(versionStr string) (string, error) {
+	matchesFormat := httpVersionRegexMatch.MatchString(versionStr)
+	if !matchesFormat {
+		return "", errors.New("http version: does not match expected pattern of")
+	}
+	parts := strings.Split(versionStr, "/")
+	versionNumberStr := parts[1]
+	return versionNumberStr, nil
+}
+
+func (r *Request) parse(data []byte) (int, error) {
+	switch r.status {
+	case Done:
+		return 0, errors.New("parser: trying to parse completed data")
+	case Initialized:
+		bytesParsed, requestLine, err := parseRequestLine(string(data))
+		if err != nil {
+			return 0, err
+		}
+		if bytesParsed == 0 {
+			return 0, nil
+		}
+
+		r.RequestLine = *requestLine
+		r.Headers = headers.NewHeaders()
+		r.status = StateHeaders
+		return bytesParsed, nil
+	case StateHeaders:
+		n, done, err := r.Headers.Parse(data)
+		if err != nil {
+			return 0, err
+		}
+		if n == 0 {
+			return 0, nil
+		}
+		if done {
+			r.status = Done
+		}
+		return n, nil
+	}
+	return 0, nil
+}
+
+func increaseBufferSize(currentBuffer []byte, maxBufferSize int) ([]byte, int, error) {
+	if len(currentBuffer) == maxBufferSize {
+		return currentBuffer, maxBufferSize, fmt.Errorf("maximum buffer size of %v reached", maxBufferSize)
+	}
+	tmpBuffer := make([]byte, 2*len(currentBuffer))
+	copy(tmpBuffer, currentBuffer)
+
+	return tmpBuffer, 2 * len(currentBuffer), nil
 }
 
 func parseRequestLine(requestStr string) (int, *RequestLine, error) {
@@ -92,46 +151,4 @@ func parseRequestLine(requestStr string) (int, *RequestLine, error) {
 	version, err := extractVersion(parts[2])
 	totalReadBytes := len(requestLineStr) + len(SEPARATOR)
 	return totalReadBytes, &RequestLine{method, resource, version}, err
-}
-
-func extractVersion(versionStr string) (string, error) {
-	matchesFormat := httpVersionRegexMatch.MatchString(versionStr)
-	if !matchesFormat {
-		return "", errors.New("http version: does not match expected pattern of")
-	}
-	parts := strings.Split(versionStr, "/")
-	versionNumberStr := parts[1]
-	return versionNumberStr, nil
-}
-
-func (r *Request) parse(data []byte) (int, error) {
-	if r.isDone() {
-		return 0, errors.New("parser: trying to parse completed data")
-	}
-	if !r.isValidStatus() {
-		return 0, fmt.Errorf("parser: unknown state %v", r.status)
-	}
-
-	bytesParsed, requestLine, err := parseRequestLine(string(data))
-	if err != nil {
-		return 0, err
-	}
-	if bytesParsed == 0 {
-		return 0, nil
-	}
-
-	r.RequestLine = *requestLine
-	r.status = Done
-
-	return bytesParsed, nil
-}
-
-func increaseBufferSize(currentBuffer []byte, maxBufferSize int) ([]byte, int, error) {
-	if len(currentBuffer) == maxBufferSize {
-		return currentBuffer, maxBufferSize, fmt.Errorf("maximum buffer size of %v reached", maxBufferSize)
-	}
-	tmpBuffer := make([]byte, 2*len(currentBuffer))
-	copy(tmpBuffer, currentBuffer)
-
-	return tmpBuffer, 2 * len(currentBuffer), nil
 }
