@@ -1,9 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"io"
+	"httpFromTCP/internal/request"
 	"log"
 	"net"
 )
@@ -22,36 +21,14 @@ func main() {
 		if err != nil {
 			log.Println("Warning accepting failed: ", err)
 		}
-		ch := getLinesChannel(conn)
-		for val := range ch {
-			fmt.Printf("read: %v\n", val)
+		req, err := request.RequestFromReader(conn)
+		if err != nil {
+			log.Fatal("Error occured: ", err)
 		}
+		log.Println("Request Line:")
+		log.Printf("- Method: %v\n", req.RequestLine.Method)
+		log.Printf("- Target: %v\n", req.RequestLine.RequestTarget)
+		log.Printf("- Version: %v\n", req.RequestLine.HttpVersion)
 		fmt.Println("Closing since channel has closed!")
 	}
-}
-
-func getLinesChannel(f io.ReadCloser) <-chan string {
-	dataCh := make(chan string)
-	currLine := ""
-	go func() {
-		defer f.Close()
-		defer close(dataCh)
-		for {
-			data := make([]byte, BYTES_TO_READ)
-			_, err := f.Read(data) // Read is a blocking operation
-			if err == io.EOF {
-				dataCh <- currLine
-				log.Println("Data read completed")
-				break
-			}
-			if i := bytes.IndexByte(data, '\n'); i != -1 {
-				currLine += string(data[:i])
-				dataCh <- currLine
-				currLine = ""
-				data = data[i+1:]
-			}
-			currLine += string(data[:])
-		}
-	}()
-	return dataCh
 }
