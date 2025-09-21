@@ -33,6 +33,8 @@ func main() {
 		for k := range req.Headers {
 			fmt.Printf("- %v: %v\n", k, req.Headers[k])
 		}
+		fmt.Println("Body:")
+		fmt.Printf("%v", string(req.Body))
 		fmt.Println("Closing since channel has closed!")
 	}
 }
