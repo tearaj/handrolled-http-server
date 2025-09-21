@@ -25,10 +25,14 @@ func main() {
 		if err != nil {
 			log.Fatal("Error occured: ", err)
 		}
-		log.Println("Request Line:")
-		log.Printf("- Method: %v\n", req.RequestLine.Method)
-		log.Printf("- Target: %v\n", req.RequestLine.RequestTarget)
-		log.Printf("- Version: %v\n", req.RequestLine.HttpVersion)
+		fmt.Println("Request Line:")
+		fmt.Printf("- Method: %v\n", req.RequestLine.Method)
+		fmt.Printf("- Target: %v\n", req.RequestLine.RequestTarget)
+		fmt.Printf("- Version: %v\n", req.RequestLine.HttpVersion)
+		fmt.Println("Headers: ")
+		for k := range req.Headers {
+			fmt.Printf("- %v: %v\n", k, req.Headers[k])
+		}
 		fmt.Println("Closing since channel has closed!")
 	}
 }
