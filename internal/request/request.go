@@ -39,9 +39,7 @@ type RequestLine struct {
 func (r *Request) isDone() bool {
 	return r.status == Done
 }
-func (r *Request) isValidStatus() bool {
-	return r.status >= Initialized && r.status <= Done
-}
+
 func newInitializedRequest() *Request {
 	return &Request{status: Initialized}
 }
@@ -97,33 +95,42 @@ func (r *Request) parse(data []byte) (int, error) {
 	switch r.status {
 	case Done:
 		return 0, errors.New("parser: trying to parse completed data")
-	case Initialized:
-		bytesParsed, requestLine, err := parseRequestLine(string(data))
-		if err != nil {
-			return 0, err
-		}
-		if bytesParsed == 0 {
-			return 0, nil
-		}
-
-		r.RequestLine = *requestLine
-		r.Headers = headers.NewHeaders()
-		r.status = StateHeaders
-		return bytesParsed, nil
+	case Initialized, StateRequestLine:
+		return initializedStateMethod(r, data)
 	case StateHeaders:
-		n, done, err := r.Headers.Parse(data)
-		if err != nil {
-			return 0, err
-		}
-		if n == 0 {
-			return 0, nil
-		}
-		if done {
-			r.status = Done
-		}
-		return n, nil
+		return stateHeadersMethod(r, data)
 	}
-	return 0, nil
+	return 0, fmt.Errorf("Unknown state")
+}
+
+func initializedStateMethod(r *Request, data []byte) (int, error) {
+	bytesParsed, requestLine, err := parseRequestLine(string(data))
+	if err != nil {
+		return 0, err
+	}
+	if bytesParsed == 0 {
+		return 0, nil
+	}
+
+	r.RequestLine = *requestLine
+	r.Headers = headers.NewHeaders()
+	r.status = StateHeaders
+	return bytesParsed, nil
+
+}
+
+func stateHeadersMethod(r *Request, data []byte) (int, error) {
+	n, done, err := r.Headers.Parse(data)
+	if err != nil {
+		return 0, err
+	}
+	if n == 0 {
+		return 0, nil
+	}
+	if done {
+		r.status = Done
+	}
+	return n, nil
 }
 
 func increaseBufferSize(currentBuffer []byte, maxBufferSize int) ([]byte, int, error) {
