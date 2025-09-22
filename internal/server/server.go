@@ -2,6 +2,8 @@ package server
 
 import (
 	"fmt"
+	"httpFromTCP/internal/headers"
+	"httpFromTCP/internal/response"
 	"log"
 	"net"
 	"sync/atomic"
@@ -46,9 +48,6 @@ func (s *Server) listen() {
 
 func (s *Server) handle(conn net.Conn) {
 	s.connections[conn] = conn
-	conn.Write([]byte(`HTTP/1.1 200 OK
-Content-Type: text/plain
-Content-Length: 13
-
-Hello World!`))
+	response.WriteStatusLine(conn, response.STATUS_CODE_OK)
+	response.WriteHeaders(conn, headers.GetDefaultHeaders(0))
 }

@@ -6,6 +6,7 @@ import (
 	"httpFromTCP/internal/constants"
 	"httpFromTCP/internal/utils"
 	"maps"
+	"strconv"
 
 	// "maps"
 	"regexp"
@@ -44,6 +45,27 @@ func (h Headers) Parse(data []byte) (int, bool, error) {
 func (h Headers) Get(key string) (string, bool) {
 	val, ok := h[strings.ToLower(key)]
 	return val, ok
+}
+
+func (h Headers) Set(headerName string, headerValue string) {
+	h[strings.ToLower(headerName)] = headerValue
+}
+
+func GetDefaultHeaders(contentSize int) Headers {
+	headers := NewHeaders()
+	headers.Set("content-length", strconv.Itoa(contentSize))
+	headers.Set("connection", "close")
+	headers.Set("content-type", "text/plain")
+	return headers
+}
+
+func (h Headers) GetAsString() string {
+	headersString := ""
+	for k, v := range h {
+		headersString += fmt.Sprintf("%v: %v%v", k, v, constants.SEPARATOR)
+	}
+	headersString += constants.SEPARATOR
+	return headersString
 }
 
 func validateHeader(header string) (Headers, error) {
