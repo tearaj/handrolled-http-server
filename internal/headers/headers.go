@@ -66,6 +66,14 @@ func (h Headers) Remove(key string) {
 	delete(h, key)
 }
 
+func (h Headers) GetAsStringWithoutFinalTermination() string {
+	headersString := ""
+	for k, v := range h {
+		headersString += fmt.Sprintf("%v: %v%v", k, v, constants.SEPARATOR)
+	}
+	return headersString
+}
+
 func (h Headers) GetAsString() string {
 	headersString := ""
 	for k, v := range h {

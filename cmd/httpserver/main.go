@@ -83,15 +83,16 @@ func handleStreaming(w *response.Writer) *server.HandlerError {
 	}
 	bufSize := 32
 	arr := make([]byte, bufSize)
-	headers := headers.GetDefaultHeaders(0)
-	headers.Replace("Transfer-Encoding", "chunked")
-	headers.Remove("content-length")
-	headers.Remove("connection")
+	responseHeaders := headers.GetDefaultHeaders(0)
+	responseHeaders.Replace("Transfer-Encoding", "chunked")
+	responseHeaders.Remove("content-length")
+	responseHeaders.Remove("connection")
+	responseHeaders.Set("Trailer", "example-trailer")
 	err = w.WriteStatusLine(response.STATUS_CODE_OK)
 	if err != nil {
 		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
 	}
-	err = w.WriteHeaders(headers)
+	err = w.WriteHeaders(responseHeaders)
 	if err != nil {
 		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
 	}
@@ -113,6 +114,16 @@ func handleStreaming(w *response.Writer) *server.HandlerError {
 	if err != nil {
 		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
 	}
-
+	trailers := headers.NewHeaders()
+	trailers.Set("example-trailer", "122345")
+	err = w.WriteTrailers(trailers)
+	log.Println("Writing trailers: ", trailers, err)
+	if err != nil {
+		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
+	}
+	err = w.WriteSeparator()
+	if err != nil {
+		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
+	}
 	return nil
 }

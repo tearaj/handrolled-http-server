@@ -89,7 +89,7 @@ func (w *Writer) WriteChunkedBodyDone() (int, error) {
 	if w.writerState != StateChunkedBody {
 		return 0, fmt.Errorf("response: writing chunked body done while in wrong state")
 	}
-	closingString := fmt.Sprintf("0%s%s", constants.SEPARATOR, constants.SEPARATOR)
+	closingString := fmt.Sprintf("0%s", constants.SEPARATOR)
 	n, err := w.Write([]byte(closingString))
 	if err != nil {
 		w.writerState = StateError
@@ -97,6 +97,20 @@ func (w *Writer) WriteChunkedBodyDone() (int, error) {
 	}
 	w.writerState = StateChunkedBodyDone
 	return n, err
+}
+
+func (w *Writer) WriteTrailers(h headers.Headers) error {
+
+	if w.writerState != StateChunkedBodyDone {
+		return fmt.Errorf("response: cannot write trailers without writing chunked body")
+	}
+	_, err := w.Write([]byte(h.GetAsStringWithoutFinalTermination()))
+	return err
+}
+
+func (w *Writer) WriteSeparator() error {
+	_, err := w.Write([]byte(constants.SEPARATOR))
+	return err
 }
 
 func getStatusLine(statusCode StatusCode) string {
