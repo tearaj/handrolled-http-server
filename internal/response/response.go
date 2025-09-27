@@ -10,19 +10,24 @@ import (
 type StatusCode int
 
 const (
-	STATUS_CODE_OK                    = 200
-	STATUS_CODE_BAD_REQUEST           = 400
-	STATUS_CODE_INTERNAL_SERVER_ERROR = 500
+	STATUS_CODE_OK                    StatusCode = 200
+	STATUS_CODE_BAD_REQUEST           StatusCode = 400
+	STATUS_CODE_INTERNAL_SERVER_ERROR StatusCode = 500
 )
 
 func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
-	statusLine := getStatusLine(STATUS_CODE_OK)
+	statusLine := getStatusLine(statusCode)
 	_, err := w.Write([]byte(statusLine + constants.SEPARATOR))
 	return err
 }
 
 func WriteHeaders(w io.Writer, headers headers.Headers) error {
 	_, err := w.Write([]byte(headers.GetAsString()))
+	return err
+}
+
+func WriteBody(w io.Writer, data []byte) error {
+	_, err := w.Write(data)
 	return err
 }
 

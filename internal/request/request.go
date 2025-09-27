@@ -13,7 +13,7 @@ import (
 type RequestState string
 
 const SEPARATOR = "\r\n" // CRLF is the separator
-const INITIAL_BUFFER_SIZE = 1
+const INITIAL_BUFFER_SIZE = 1 
 const MAX_BUFFER_SIZE = 1024
 const (
 	Initialized      RequestState = "INITIALIZED"
@@ -62,6 +62,17 @@ func (r *Request) isValidContentLength() error {
 	return nil
 }
 
+func (r *Request) getContentLength() (int, error) {
+	contentLengthStr, ok := r.Headers.Get(headers.CONTENT_LENGTH)
+	if !ok {
+		return 0, nil
+	}
+	contentLength, err := strconv.Atoi(contentLengthStr)
+	if err != nil {
+		return 0, err
+	}
+	return contentLength, nil
+}
 func newInitializedRequest() *Request {
 	return &Request{status: Initialized}
 }
@@ -117,17 +128,51 @@ func extractVersion(versionStr string) (string, error) {
 }
 
 func (r *Request) parse(data []byte) (int, error) {
-	switch r.status {
-	case Done:
-		return 0, errors.New("parser: trying to parse completed data")
-	case Initialized, StateRequestLine:
-		return initializedStateMethod(r, data)
-	case StateHeaders:
-		return stateHeadersMethod(r, data)
-	case StateBody:
-		return stateBodyMethod(r, data)
+	totalBytesParsed := 0
+	remainingData := data
+
+	for {
+		switch r.status {
+		case Done:
+			return totalBytesParsed, nil
+		case Initialized, StateRequestLine:
+			n, err := initializedStateMethod(r, remainingData)
+			if err != nil {
+				return totalBytesParsed, err
+			}
+			if n == 0 {
+				return totalBytesParsed, nil
+			}
+			totalBytesParsed += n
+			remainingData = remainingData[n:]
+
+		case StateHeaders:
+			n, err := stateHeadersMethod(r, remainingData)
+			if err != nil {
+				return totalBytesParsed, err
+			}
+			if n == 0 {
+				return totalBytesParsed, nil
+			}
+			totalBytesParsed += n
+			remainingData = remainingData[n:]
+
+		case StateBody:
+			n, err := stateBodyMethod(r, remainingData)
+			if err != nil {
+				return totalBytesParsed, err
+			}
+			totalBytesParsed += n
+			return totalBytesParsed, nil
+
+		default:
+			return totalBytesParsed, fmt.Errorf("unknown state when parsing request")
+		}
+
+		if len(remainingData) == 0 {
+			return totalBytesParsed, nil
+		}
 	}
-	return 0, fmt.Errorf("Unknown state")
 }
 
 func initializedStateMethod(r *Request, data []byte) (int, error) {
@@ -147,27 +192,45 @@ func initializedStateMethod(r *Request, data []byte) (int, error) {
 }
 
 func stateHeadersMethod(r *Request, data []byte) (int, error) {
-	n, done, err := r.Headers.Parse(data)
-	if err != nil {
-		return 0, err
-	}
-	if n == 0 {
-		return 0, nil
-	}
-	if done {
-		_, ok := r.Headers.Get(headers.CONTENT_LENGTH)
-		if ok {
-			r.status = StateBody
-		} else {
-			r.status = Done
+	totalBytesParsed := 0
+	remainingData := data
+
+	for {
+		n, done, err := r.Headers.Parse(remainingData)
+		if err != nil {
+			return totalBytesParsed, err
+		}
+
+		if n == 0 {
+			return totalBytesParsed, nil
+		}
+
+		totalBytesParsed += n
+		remainingData = remainingData[n:]
+
+		if done {
+			_, ok := r.Headers.Get(headers.CONTENT_LENGTH)
+			if ok {
+				r.status = StateBody
+			} else {
+				r.status = Done
+			}
+			return totalBytesParsed, nil
+		}
+
+		if len(remainingData) == 0 {
+			return totalBytesParsed, nil
 		}
 	}
-	return n, nil
 }
 
 func stateBodyMethod(r *Request, data []byte) (int, error) {
 	r.Body = append(r.Body, data...)
-	return len(data), nil
+	contentLength, err := r.getContentLength()
+	if len(r.Body) == contentLength {
+		r.status = Done
+	}
+	return len(data), err
 }
 
 func increaseBufferSize(currentBuffer []byte, maxBufferSize int) ([]byte, int, error) {
