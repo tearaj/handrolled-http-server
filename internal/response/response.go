@@ -18,10 +18,13 @@ const (
 type WriterState = string
 
 const (
-	StateInitialized WriterState = "INITIALIZED"
-	StateStatusLine  WriterState = "STATUS_LINE"
-	StateHeaders     WriterState = "STATE_HEADERS"
-	StateBody        WriterState = "STATE_BODY"
+	StateInitialized     WriterState = "INITIALIZED"
+	StateStatusLine      WriterState = "STATUS_LINE"
+	StateHeaders         WriterState = "STATE_HEADERS"
+	StateBody            WriterState = "STATE_BODY"
+	StateChunkedBody     WriterState = "STATE_CHUNKED_BODY"
+	StateChunkedBodyDone WriterState = "STATE_CHUNKED_BODY_DONE"
+	StateError           WriterState = "STATE_ERROR"
 )
 
 type Writer struct {
@@ -50,7 +53,11 @@ func (w *Writer) WriteHeaders(headers headers.Headers) error {
 		return fmt.Errorf("response: writing headers without writing status line")
 	}
 	_, err := w.Write([]byte(headers.GetAsString()))
-	w.writerState = StateHeaders
+	v, ok := headers.Get("transfer-encoding")
+	if !ok || v != "chunked" {
+		w.writerState = StateHeaders
+	}
+	w.writerState = StateChunkedBody
 	return err
 }
 
@@ -61,6 +68,35 @@ func (w *Writer) WriteBody(data []byte) error {
 	_, err := w.Write(data)
 	w.writerState = StateBody
 	return err
+}
+
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	if w.writerState != StateChunkedBody {
+		return 0, fmt.Errorf("response: writing chunked body while in wrong state")
+	}
+	count := len(p)
+	lengthLine := fmt.Sprintf("%x%s", count, constants.SEPARATOR)
+	_, err := w.Write([]byte(lengthLine))
+	if err != nil {
+		return 0, err
+	}
+	dataLine := append(p, []byte(constants.SEPARATOR)...)
+	n, err := w.Write(dataLine)
+	return n, err
+}
+
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	if w.writerState != StateChunkedBody {
+		return 0, fmt.Errorf("response: writing chunked body done while in wrong state")
+	}
+	closingString := fmt.Sprintf("0%s%s", constants.SEPARATOR, constants.SEPARATOR)
+	n, err := w.Write([]byte(closingString))
+	if err != nil {
+		w.writerState = StateError
+		return 0, err
+	}
+	w.writerState = StateChunkedBodyDone
+	return n, err
 }
 
 func getStatusLine(statusCode StatusCode) string {

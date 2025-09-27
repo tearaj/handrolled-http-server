@@ -5,7 +5,9 @@ import (
 	"httpFromTCP/internal/request"
 	"httpFromTCP/internal/response"
 	"httpFromTCP/internal/server"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -61,6 +63,9 @@ func handler(w *response.Writer, req *request.Request) *server.HandlerError {
 	if req.RequestLine.RequestTarget == "/myproblem" {
 		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: internalServerErrorHtml}
 	}
+	if req.RequestLine.RequestTarget == "/httpbin/stream/100" {
+		return handleStreaming(w)
+	}
 	headers := headers.GetDefaultHeaders(len(okHtml))
 	err := w.WriteStatusLine(response.STATUS_CODE_OK)
 	err = w.WriteHeaders(headers)
@@ -68,5 +73,46 @@ func handler(w *response.Writer, req *request.Request) *server.HandlerError {
 	if err != nil {
 		log.Println("ERROR: Writing handler", err)
 	}
+	return nil
+}
+
+func handleStreaming(w *response.Writer) *server.HandlerError {
+	res, err := http.Get("https://httpbin.org/stream/100")
+	if err != nil {
+		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
+	}
+	bufSize := 32
+	arr := make([]byte, bufSize)
+	headers := headers.GetDefaultHeaders(0)
+	headers.Replace("Transfer-Encoding", "chunked")
+	headers.Remove("content-length")
+	headers.Remove("connection")
+	err = w.WriteStatusLine(response.STATUS_CODE_OK)
+	if err != nil {
+		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
+	}
+	err = w.WriteHeaders(headers)
+	if err != nil {
+		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
+	}
+	for {
+		n, err := res.Body.Read(arr)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
+		}
+		_, err = w.WriteChunkedBody(arr[:n])
+		if err != nil {
+			return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
+		}
+		copy(arr, arr[n:])
+	}
+	_, err = w.WriteChunkedBodyDone()
+	if err != nil {
+		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
+	}
+
 	return nil
 }

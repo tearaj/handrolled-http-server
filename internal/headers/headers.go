@@ -58,6 +58,14 @@ func GetDefaultHeaders(contentSize int) Headers {
 	return headers
 }
 
+func (h Headers) Replace(key, value string) {
+	h[strings.ToLower(key)] = value
+}
+
+func (h Headers) Remove(key string) {
+	delete(h, key)
+}
+
 func (h Headers) GetAsString() string {
 	headersString := ""
 	for k, v := range h {
