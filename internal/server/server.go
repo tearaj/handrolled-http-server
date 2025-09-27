@@ -5,7 +5,6 @@ import (
 	"httpFromTCP/internal/headers"
 	"httpFromTCP/internal/request"
 	"httpFromTCP/internal/response"
-	"io"
 	"log"
 	"net"
 	"sync/atomic"
@@ -15,7 +14,7 @@ type HandlerError struct {
 	Code    response.StatusCode
 	Message string
 }
-type Handler func(w io.Writer, request *request.Request) *HandlerError
+type Handler func(w *response.Writer, request *request.Request) *HandlerError
 
 type Server struct {
 	connections map[net.Conn]net.Conn
@@ -42,6 +41,7 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) listen(handler Handler) {
+
 	for {
 		if s.closed.Load() {
 			break
@@ -54,15 +54,15 @@ func (s *Server) listen(handler Handler) {
 	}
 }
 
-func (h *HandlerError) writeToConn(w io.Writer) error {
+func (h *HandlerError) writeToConn(w response.Writer) error {
 	res := h.Code
 	errHeaders := headers.GetDefaultHeaders(len(h.Message))
-	err := response.WriteStatusLine(w, res)
+	err := w.WriteStatusLine(res)
 	if err != nil {
 		log.Printf("ERROR: %v\n", h.Message)
 	}
-	err = response.WriteHeaders(w, errHeaders)
-	err = response.WriteBody(w, []byte(h.Message))
+	err = w.WriteHeaders(errHeaders)
+	err = w.WriteBody([]byte(h.Message))
 	if err != nil {
 		log.Printf("ERROR: %v\n", h.Message)
 	}
@@ -70,17 +70,19 @@ func (h *HandlerError) writeToConn(w io.Writer) error {
 }
 
 func (s *Server) handle(conn net.Conn, handler Handler) {
+	defer conn.Close()
 	s.connections[conn] = conn
 	log.Println("Handler acceped!")
 	req, err := request.RequestFromReader(conn)
+	responseWriter := response.NewWriter(conn)
 	if err != nil {
 		handlerErr := HandlerError{Code: 400, Message: err.Error()}
-		handlerErr.writeToConn(conn)
+		handlerErr.writeToConn(*responseWriter)
 		return
 	}
-	handlerErr := handler(conn, &req)
+	handlerErr := handler(responseWriter, &req)
 	if handlerErr != nil {
 		log.Println("Serve Errors: ", handlerErr)
-		handlerErr.writeToConn(conn)
+		handlerErr.writeToConn(*responseWriter)
 	}
 }

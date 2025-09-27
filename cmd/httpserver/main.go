@@ -1,12 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"httpFromTCP/internal/headers"
 	"httpFromTCP/internal/request"
 	"httpFromTCP/internal/response"
 	"httpFromTCP/internal/server"
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -14,6 +12,33 @@ import (
 )
 
 const port = 42069
+const badRequestHtml = `<html>
+  <head>
+    <title>400 Bad Request</title>
+  </head>
+  <body>
+    <h1>Bad Request</h1>
+    <p>Your request honestly kinda sucked.</p>
+  </body>
+</html>`
+const internalServerErrorHtml = `<html>
+  <head>
+    <title>500 Internal Server Error</title>
+  </head>
+  <body>
+    <h1>Internal Server Error</h1>
+    <p>Okay, you know what? This one is on me.</p>
+  </body>
+</html>`
+const okHtml = `<html>
+  <head>
+    <title>200 OK</title>
+  </head>
+  <body>
+    <h1>Success!</h1>
+    <p>Your request was an absolute banger.</p>
+  </body>
+</html>`
 
 func main() {
 	server, err := server.Serve(port, handler)
@@ -29,18 +54,17 @@ func main() {
 	log.Println("Server gracefully stopped")
 }
 
-func handler(w io.Writer, req *request.Request) *server.HandlerError {
+func handler(w *response.Writer, req *request.Request) *server.HandlerError {
 	if req.RequestLine.RequestTarget == "/yourproblem" {
-		return &server.HandlerError{Code: response.STATUS_CODE_BAD_REQUEST, Message: fmt.Sprint("Your problem is not my problem\n")}
+		return &server.HandlerError{Code: response.STATUS_CODE_BAD_REQUEST, Message: badRequestHtml}
 	}
 	if req.RequestLine.RequestTarget == "/myproblem" {
-		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: fmt.Sprint("Woopsie, my bad\n")}
+		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: internalServerErrorHtml}
 	}
-	message := "All good, frfr\n"
-	headers := headers.GetDefaultHeaders(len(message))
-	err := response.WriteStatusLine(w, response.STATUS_CODE_OK)
-	err = response.WriteHeaders(w, headers)
-	err = response.WriteBody(w, []byte(message))
+	headers := headers.GetDefaultHeaders(len(okHtml))
+	err := w.WriteStatusLine(response.STATUS_CODE_OK)
+	err = w.WriteHeaders(headers)
+	err = w.WriteBody([]byte(okHtml))
 	if err != nil {
 		log.Println("ERROR: Writing handler", err)
 	}

@@ -15,19 +15,51 @@ const (
 	STATUS_CODE_INTERNAL_SERVER_ERROR StatusCode = 500
 )
 
-func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
+type WriterState = string
+
+const (
+	StateInitialized WriterState = "INITIALIZED"
+	StateStatusLine  WriterState = "STATUS_LINE"
+	StateHeaders     WriterState = "STATE_HEADERS"
+	StateBody        WriterState = "STATE_BODY"
+)
+
+type Writer struct {
+	w           io.Writer
+	writerState WriterState
+}
+
+func NewWriter(w io.Writer) *Writer {
+	return &Writer{w, StateInitialized}
+}
+func (w *Writer) Write(data []byte) (int, error) {
+	return w.w.Write(data)
+}
+func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
+	if w.writerState != StateInitialized {
+		return fmt.Errorf("response: writing status line while not initialized")
+	}
 	statusLine := getStatusLine(statusCode)
 	_, err := w.Write([]byte(statusLine + constants.SEPARATOR))
+	w.writerState = StateStatusLine
 	return err
 }
 
-func WriteHeaders(w io.Writer, headers headers.Headers) error {
+func (w *Writer) WriteHeaders(headers headers.Headers) error {
+	if w.writerState != StateStatusLine {
+		return fmt.Errorf("response: writing headers without writing status line")
+	}
 	_, err := w.Write([]byte(headers.GetAsString()))
+	w.writerState = StateHeaders
 	return err
 }
 
-func WriteBody(w io.Writer, data []byte) error {
+func (w *Writer) WriteBody(data []byte) error {
+	if w.writerState != StateHeaders {
+		return fmt.Errorf("response: writing body without writing headers")
+	}
 	_, err := w.Write(data)
+	w.writerState = StateBody
 	return err
 }
 

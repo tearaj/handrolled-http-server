@@ -79,7 +79,6 @@ func newInitializedRequest() *Request {
 
 func RequestFromReader(r io.Reader) (Request, error) {
 	bufferSize := INITIAL_BUFFER_SIZE
-	reader := r
 
 	buffer := make([]byte, bufferSize)
 	request := newInitializedRequest()
@@ -93,7 +92,7 @@ func RequestFromReader(r io.Reader) (Request, error) {
 				return Request{}, err
 			}
 		}
-		readByteCount, err := reader.Read(buffer[readIndex:])
+		readByteCount, err := r.Read(buffer[readIndex:])
 		if err != nil {
 			if err == io.EOF {
 				request.status = Done
