@@ -13,7 +13,7 @@ import (
 type RequestState string
 
 const SEPARATOR = "\r\n" // CRLF is the separator
-const INITIAL_BUFFER_SIZE = 1 
+const INITIAL_BUFFER_SIZE = 1
 const MAX_BUFFER_SIZE = 1024
 const (
 	Initialized      RequestState = "INITIALIZED"
@@ -79,6 +79,7 @@ func newInitializedRequest() *Request {
 
 func RequestFromReader(r io.Reader) (Request, error) {
 	bufferSize := INITIAL_BUFFER_SIZE
+	reader := r
 
 	buffer := make([]byte, bufferSize)
 	request := newInitializedRequest()
@@ -92,7 +93,7 @@ func RequestFromReader(r io.Reader) (Request, error) {
 				return Request{}, err
 			}
 		}
-		readByteCount, err := r.Read(buffer[readIndex:])
+		readByteCount, err := reader.Read(buffer[readIndex:])
 		if err != nil {
 			if err == io.EOF {
 				request.status = Done
@@ -225,8 +226,17 @@ func stateHeadersMethod(r *Request, data []byte) (int, error) {
 }
 
 func stateBodyMethod(r *Request, data []byte) (int, error) {
-	r.Body = append(r.Body, data...)
 	contentLength, err := r.getContentLength()
+	if err != nil {
+		return 0, err
+	}
+	bytesNeeded := contentLength - len(r.Body)
+	if bytesNeeded <= 0 {
+		r.status = Done
+		return 0, nil
+	}
+	parsableByteCount := min(bytesNeeded, len(data))
+	r.Body = append(r.Body, data[:parsableByteCount]...)
 	if len(r.Body) == contentLength {
 		r.status = Done
 	}
