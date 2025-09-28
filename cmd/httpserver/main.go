@@ -66,6 +66,9 @@ func handler(w *response.Writer, req *request.Request) *server.HandlerError {
 	if req.RequestLine.RequestTarget == "/httpbin/stream/100" {
 		return handleStreaming(w)
 	}
+	if req.RequestLine.RequestTarget == "/video" {
+		return handleVideo(w)
+	}
 	headers := headers.GetDefaultHeaders(len(okHtml))
 	err := w.WriteStatusLine(response.STATUS_CODE_OK)
 	err = w.WriteHeaders(headers)
@@ -122,6 +125,28 @@ func handleStreaming(w *response.Writer) *server.HandlerError {
 		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
 	}
 	err = w.WriteSeparator()
+	if err != nil {
+		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
+	}
+	return nil
+}
+
+func handleVideo(w *response.Writer) *server.HandlerError {
+	videoBytes, err := os.ReadFile("assets/vim.mp4")
+	if err != nil {
+		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
+	}
+	err = w.WriteStatusLine(response.STATUS_CODE_OK)
+	if err != nil {
+		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
+	}
+	headers := headers.GetDefaultHeaders(len(videoBytes))
+	headers.Set("content-type", "video/mp4")
+	err = w.WriteHeaders(headers)
+	if err != nil {
+		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
+	}
+	_, err = w.Write(videoBytes)
 	if err != nil {
 		return &server.HandlerError{Code: response.STATUS_CODE_INTERNAL_SERVER_ERROR, Message: err.Error()}
 	}
